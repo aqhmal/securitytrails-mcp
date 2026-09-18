@@ -235,8 +235,7 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
         'securitytrails_tags',
         {
             title: 'Domain tags',
-            description:
-                'Return SecurityTrails’ classification tags for a domain. Many domains carry no tags at all.',
+            description: 'Return SecurityTrails’ classification tags for a domain. Many domains carry no tags at all.',
             annotations: READ_ONLY,
             inputSchema: z.object({
                 domain: DomainSchema.describe('apex domain or hostname'),

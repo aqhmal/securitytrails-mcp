@@ -336,7 +336,13 @@ export const renderIpWhois: Renderer = data => {
             str(contact?.type),
             str(contact?.organization),
             str(contact?.email),
-            [str(contact?.street1), str(contact?.city), str(contact?.state), str(contact?.postal_code), str(contact?.country)]
+            [
+                str(contact?.street1),
+                str(contact?.city),
+                str(contact?.state),
+                str(contact?.postal_code),
+                str(contact?.country)
+            ]
                 .filter(Boolean)
                 .join(', ') || undefined
         ];

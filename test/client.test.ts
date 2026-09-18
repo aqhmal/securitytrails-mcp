@@ -69,17 +69,18 @@ describe('SecurityTrailsClient', () => {
 
     it('points a 429 at the usage tool', async () => {
         const { client } = testClient(
-            [{ status: 429, body: {} }, { status: 429, body: {} }, { status: 429, body: {} }],
+            [
+                { status: 429, body: {} },
+                { status: 429, body: {} },
+                { status: 429, body: {} }
+            ],
             { maxRetries: 2 }
         );
         await assert.rejects(() => client.request('/ping'), /securitytrails_usage/);
     });
 
     it('retries a transient 500 and returns the eventual success', async () => {
-        const { client, calls } = testClient([
-            { status: 500, body: {} },
-            { body: { success: true } }
-        ]);
+        const { client, calls } = testClient([{ status: 500, body: {} }, { body: { success: true } }]);
         const result = await client.request<{ success: boolean }>('/ping');
         assert.deepEqual(result, { success: true });
         assert.equal(calls.length, 2, 'should have retried once');
@@ -87,7 +88,12 @@ describe('SecurityTrailsClient', () => {
 
     it('stops retrying after maxRetries', async () => {
         const { client, calls } = testClient(
-            [{ status: 503, body: {} }, { status: 503, body: {} }, { status: 503, body: {} }, { status: 503, body: {} }],
+            [
+                { status: 503, body: {} },
+                { status: 503, body: {} },
+                { status: 503, body: {} },
+                { status: 503, body: {} }
+            ],
             { maxRetries: 2 }
         );
         await assert.rejects(() => client.request('/ping'));
@@ -158,4 +164,3 @@ describe('SecurityTrailsClient', () => {
         await assert.rejects(() => client.request('/ping'), /timed out after 1234ms/);
     });
 });
-

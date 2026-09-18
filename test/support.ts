@@ -68,5 +68,11 @@ export async function connectedClient(responses: StubResponse[]) {
     });
     const client = new Client({ name: 'test-harness', version: '1.0.0' }, { versionNegotiation: { mode: 'auto' } });
     await client.connect(transport);
-    return { client, calls, close: async () => { await client.close(); } };
+    return {
+        client,
+        calls,
+        close: async () => {
+            await client.close();
+        }
+    };
 }

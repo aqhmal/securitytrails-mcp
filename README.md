@@ -8,8 +8,8 @@ An [MCP](https://modelcontextprotocol.io) server that gives an LLM agent the
 [SecurityTrails](https://securitytrails.com) API: DNS history, subdomain enumeration, WHOIS
 (current and historical), SSL certificates, and IPv4 intelligence — 17 read-only tools.
 
-Built for reconnaissance work where the interesting question is usually *"what did this look like
-before the CDN went up?"* rather than *"what does it resolve to now?"*.
+Built for reconnaissance work where the interesting question is usually _"what did this look like
+before the CDN went up?"_ rather than _"what does it resolve to now?"_.
 
 ## Quickstart
 
@@ -47,25 +47,25 @@ Cursor uses `~/.cursor/mcp.json`; VS Code uses `.vscode/mcp.json` in the workspa
 Every tool is read-only, accepts `response_format`, and costs **one SecurityTrails API query per
 call** — including per page when paging.
 
-| Tool | What it does | Plan |
-| --- | --- | --- |
-| `securitytrails_ping` | Check the API key is accepted | Free |
-| `securitytrails_usage` | Month-to-date consumption, allowance, remaining quota | Free |
-| `securitytrails_domain_details` | Current DNS records, hostname counts, registrar metadata | Free |
-| `securitytrails_subdomains` | Known subdomains as fully-qualified hostnames | Free |
-| `securitytrails_associated` | Domains sharing registrant details or infrastructure | Free |
-| `securitytrails_dns_history` | Historical A/AAAA/MX/NS/SOA/TXT records with observation dates | Free |
-| `securitytrails_whois_current` | Current WHOIS record | Free |
-| `securitytrails_whois_history` | Past WHOIS records — often pre-redaction | Free |
-| `securitytrails_ssl` | Certificates issued for a hostname, including SAN entries | Free |
-| `securitytrails_tags` | SecurityTrails classification tags | Free |
-| `securitytrails_ip_neighbors` | Adjacent IPv4 blocks, site counts, sample hostnames | Free |
-| `securitytrails_ip_whois` | Network block registration, owner, abuse contacts | Free |
-| `securitytrails_search_domains` | Search the domain dataset by filter object or DSL query | Free |
-| `securitytrails_search_ips` | Search the IP dataset by filter object or DSL query | Free |
-| `securitytrails_scroll` | Continue a search via its `meta.scroll_id`, when offered | Varies |
-| `securitytrails_ip_useragents` | User agents observed originating from an IPv4 address | **Paid** |
-| `securitytrails_company_associated_ips` | IP ranges attributed to a domain's owning organisation | **Paid** |
+| Tool                                    | What it does                                                   | Plan     |
+| --------------------------------------- | -------------------------------------------------------------- | -------- |
+| `securitytrails_ping`                   | Check the API key is accepted                                  | Free     |
+| `securitytrails_usage`                  | Month-to-date consumption, allowance, remaining quota          | Free     |
+| `securitytrails_domain_details`         | Current DNS records, hostname counts, registrar metadata       | Free     |
+| `securitytrails_subdomains`             | Known subdomains as fully-qualified hostnames                  | Free     |
+| `securitytrails_associated`             | Domains sharing registrant details or infrastructure           | Free     |
+| `securitytrails_dns_history`            | Historical A/AAAA/MX/NS/SOA/TXT records with observation dates | Free     |
+| `securitytrails_whois_current`          | Current WHOIS record                                           | Free     |
+| `securitytrails_whois_history`          | Past WHOIS records — often pre-redaction                       | Free     |
+| `securitytrails_ssl`                    | Certificates issued for a hostname, including SAN entries      | Free     |
+| `securitytrails_tags`                   | SecurityTrails classification tags                             | Free     |
+| `securitytrails_ip_neighbors`           | Adjacent IPv4 blocks, site counts, sample hostnames            | Free     |
+| `securitytrails_ip_whois`               | Network block registration, owner, abuse contacts              | Free     |
+| `securitytrails_search_domains`         | Search the domain dataset by filter object or DSL query        | Free     |
+| `securitytrails_search_ips`             | Search the IP dataset by filter object or DSL query            | Free     |
+| `securitytrails_scroll`                 | Continue a search via its `meta.scroll_id`, when offered       | Varies   |
+| `securitytrails_ip_useragents`          | User agents observed originating from an IPv4 address          | **Paid** |
+| `securitytrails_company_associated_ips` | IP ranges attributed to a domain's owning organisation         | **Paid** |
 
 Plan column reflects what a free-tier key could reach at the time of writing; SecurityTrails may
 move endpoints between tiers. The two paid endpoints return a clear plan error rather than a
@@ -168,11 +168,11 @@ are never retried, so a bad argument costs one query rather than three.
 
 ## Configuration
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `SECURITYTRAILS_API_KEY` | *(required)* | Your API key |
-| `SECURITYTRAILS_TIMEOUT_MS` | `30000` | Per-attempt request timeout |
-| `SECURITYTRAILS_MAX_RETRIES` | `2` | Retries on 429/5xx/network errors |
+| Variable                     | Default      | Purpose                           |
+| ---------------------------- | ------------ | --------------------------------- |
+| `SECURITYTRAILS_API_KEY`     | _(required)_ | Your API key                      |
+| `SECURITYTRAILS_TIMEOUT_MS`  | `30000`      | Per-attempt request timeout       |
+| `SECURITYTRAILS_MAX_RETRIES` | `2`          | Retries on 429/5xx/network errors |
 
 If the key is missing the server still starts and still lists its tools, so the host shows it as
 healthy; each tool call then returns an error naming the variable to set. This is deliberate — a
@@ -187,12 +187,15 @@ cd securitytrails-mcp
 npm install
 npm test          # 85 tests, no API key needed — the HTTP layer is stubbed
 npm run build
+npm run format    # Prettier, in place
 npm run inspect   # build, then open the MCP Inspector against the server
 ```
 
 The suite drives a real MCP `Client` against the server in-process, so tool schemas, argument
 validation, rendering and error handling are exercised through the actual protocol rather than by
 calling handlers directly. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+Release history is in [CHANGELOG.md](./CHANGELOG.md).
 
 `evals/` holds a ten-question evaluation set for checking whether a model can actually accomplish
 realistic lookups with these tools.

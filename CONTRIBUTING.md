@@ -10,19 +10,35 @@ npm test
 npm run build
 ```
 
+To try your build against a real MCP host, point the host's config at the built entrypoint:
+
+```json
+{
+  "mcpServers": {
+    "securitytrails-dev": {
+      "command": "node",
+      "args": ["/absolute/path/to/securitytrails-mcp/dist/index.js"],
+      "env": { "SECURITYTRAILS_API_KEY": "your_key" }
+    }
+  }
+}
+```
+
+Or drive it without a host at all: `npm run inspect`.
+
 `npm test` needs no API key — the HTTP layer is stubbed. Please keep it that way, so contributors
 without a paid SecurityTrails plan can still run the full suite.
 
 ## Layout
 
-| Path | Responsibility |
-| --- | --- |
-| `src/client.ts` | HTTP, timeout, retry, and turning status codes into actionable messages |
-| `src/schemas.ts` | Reusable Zod schemas and host normalisation |
-| `src/markdown.ts` | Generic Markdown primitives and timestamp handling |
-| `src/render.ts` | One Markdown renderer per response shape |
-| `src/result.ts` | Wrapping handlers, applying `response_format`, error results |
-| `src/tools/` | Tool registration, grouped by resource |
+| Path              | Responsibility                                                          |
+| ----------------- | ----------------------------------------------------------------------- |
+| `src/client.ts`   | HTTP, timeout, retry, and turning status codes into actionable messages |
+| `src/schemas.ts`  | Reusable Zod schemas and host normalisation                             |
+| `src/markdown.ts` | Generic Markdown primitives and timestamp handling                      |
+| `src/render.ts`   | One Markdown renderer per response shape                                |
+| `src/result.ts`   | Wrapping handlers, applying `response_format`, error results            |
+| `src/tools/`      | Tool registration, grouped by resource                                  |
 
 ## Adding a tool
 
@@ -73,5 +89,19 @@ Both are intentional. Please don't "fix" them without discussion:
 
 ## Style
 
-TypeScript, 4-space indent. Run `npm run typecheck` before pushing; CI runs the type check, tests
-and build on Node 20, 22 and 24, and verifies the published tarball contents.
+Formatting is handled by Prettier — don't hand-align anything.
+
+```sh
+npm run format        # rewrite files in place
+npm run format:check  # verify without writing (this is what CI runs)
+```
+
+Before pushing:
+
+```sh
+npm run typecheck && npm run format:check && npm test
+```
+
+CI runs all three plus the build on Node 20, 22 and 24, and verifies the published tarball
+contents. An `.editorconfig` is included so most editors pick up the indent settings
+automatically.
