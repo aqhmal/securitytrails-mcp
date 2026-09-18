@@ -2,17 +2,34 @@
 
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { SecurityTrailsError } from './client.js';
+import type { Renderer } from './render.js';
 
-function text(value: unknown): string {
+export type ResponseFormat = 'markdown' | 'json';
+
+/** Any tool argument set carries a response format; every tool schema supplies a default. */
+export interface FormatArgs {
+    response_format: ResponseFormat;
+}
+
+function toJson(value: unknown): string {
     return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 }
 
-export function jsonResult(data: unknown): CallToolResult {
-    return { content: [{ type: 'text', text: text(data) }] };
-}
-
-export function structuredResult(data: Record<string, unknown>): CallToolResult {
-    return { content: [{ type: 'text', text: text(data) }], structuredContent: data };
+/**
+ * Render a payload in the requested format.
+ *
+ * Markdown rendering is best-effort: if the renderer does not recognise the payload, or throws
+ * on an unexpected shape, the raw JSON is returned instead. Returning a partial or empty
+ * Markdown document would hide data the caller asked for.
+ */
+export function render(data: unknown, format: ResponseFormat, renderer?: Renderer): string {
+    if (format === 'json' || !renderer) return toJson(data);
+    try {
+        const markdown = renderer(data);
+        return markdown && markdown.trim() !== '' ? markdown : toJson(data);
+    } catch {
+        return toJson(data);
+    }
 }
 
 export function errorResult(error: unknown): CallToolResult {
@@ -24,26 +41,39 @@ export function errorResult(error: unknown): CallToolResult {
 }
 
 /**
- * Wrap a handler so a thrown SecurityTrailsError becomes an `isError` result the
- * model can read and retry against, rather than a protocol-level failure.
+ * Wrap a handler so a thrown SecurityTrailsError becomes an `isError` result the model can read
+ * and retry against, rather than a protocol-level failure, and so the result honours
+ * `response_format`.
  */
-export function safe<Args>(run: (args: Args) => Promise<unknown>): (args: Args) => Promise<CallToolResult> {
+export function safe<Args extends FormatArgs>(
+    run: (args: Args) => Promise<unknown>,
+    renderer?: Renderer
+): (args: Args) => Promise<CallToolResult> {
     return async (args: Args) => {
         try {
-            return jsonResult(await run(args));
+            const data = await run(args);
+            return { content: [{ type: 'text', text: render(data, args.response_format, renderer) }] };
         } catch (error) {
             return errorResult(error);
         }
     };
 }
 
-/** As {@link safe}, for tools that declare an `outputSchema`. */
-export function safeStructured<Args>(
-    run: (args: Args) => Promise<Record<string, unknown>>
+/**
+ * As {@link safe}, for tools that declare an `outputSchema`. `structuredContent` always carries
+ * the machine-readable object; only the text rendering follows `response_format`.
+ */
+export function safeStructured<Args extends FormatArgs>(
+    run: (args: Args) => Promise<Record<string, unknown>>,
+    renderer?: Renderer
 ): (args: Args) => Promise<CallToolResult> {
     return async (args: Args) => {
         try {
-            return structuredResult(await run(args));
+            const data = await run(args);
+            return {
+                content: [{ type: 'text', text: render(data, args.response_format, renderer) }],
+                structuredContent: data
+            };
         } catch (error) {
             return errorResult(error);
         }

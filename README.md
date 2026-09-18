@@ -24,8 +24,6 @@ claude mcp add securitytrails --env SECURITYTRAILS_API_KEY=your_key -- npx -y se
 
 ### Claude Desktop, Cursor, VS Code, and other MCP hosts
 
-Add the server to your host's MCP config:
-
 ```json
 {
   "mcpServers": {
@@ -46,42 +44,127 @@ Cursor uses `~/.cursor/mcp.json`; VS Code uses `.vscode/mcp.json` in the workspa
 
 ## Tools
 
-Every tool is read-only and costs **one SecurityTrails API query per call** unless noted.
+Every tool is read-only, accepts `response_format`, and costs **one SecurityTrails API query per
+call** — including per page when paging.
 
-| Tool | What it does |
-| --- | --- |
-| `securitytrails_ping` | Check the API key is accepted |
-| `securitytrails_usage` | Month-to-date consumption, allowance, and remaining quota |
-| `securitytrails_domain_details` | Current DNS records, hostname counts, registrar metadata |
-| `securitytrails_subdomains` | Known subdomains, returned as fully-qualified hostnames |
-| `securitytrails_associated` | Domains sharing registrant details or infrastructure |
-| `securitytrails_dns_history` | Historical A/AAAA/MX/NS/SOA/TXT records with observation dates |
-| `securitytrails_whois_current` | Current WHOIS record |
-| `securitytrails_whois_history` | Past WHOIS records — often pre-redaction |
-| `securitytrails_ssl` | Certificates issued for a hostname, including SAN entries |
-| `securitytrails_tags` | SecurityTrails classification tags |
-| `securitytrails_ip_neighbors` | Adjacent IPv4 addresses and their hostname counts |
-| `securitytrails_ip_whois` | Network block registration, owner, abuse contacts |
-| `securitytrails_ip_useragents` | User agents observed originating from an IPv4 address |
-| `securitytrails_company_associated_ips` | IP ranges attributed to a domain's owning organisation |
-| `securitytrails_search_domains` | Search the domain dataset by filter object or DSL query |
-| `securitytrails_search_ips` | Search the IP dataset by filter object or DSL query |
-| `securitytrails_scroll` | Page a large search result via its `meta.scroll_id` |
+| Tool | What it does | Plan |
+| --- | --- | --- |
+| `securitytrails_ping` | Check the API key is accepted | Free |
+| `securitytrails_usage` | Month-to-date consumption, allowance, remaining quota | Free |
+| `securitytrails_domain_details` | Current DNS records, hostname counts, registrar metadata | Free |
+| `securitytrails_subdomains` | Known subdomains as fully-qualified hostnames | Free |
+| `securitytrails_associated` | Domains sharing registrant details or infrastructure | Free |
+| `securitytrails_dns_history` | Historical A/AAAA/MX/NS/SOA/TXT records with observation dates | Free |
+| `securitytrails_whois_current` | Current WHOIS record | Free |
+| `securitytrails_whois_history` | Past WHOIS records — often pre-redaction | Free |
+| `securitytrails_ssl` | Certificates issued for a hostname, including SAN entries | Free |
+| `securitytrails_tags` | SecurityTrails classification tags | Free |
+| `securitytrails_ip_neighbors` | Adjacent IPv4 blocks, site counts, sample hostnames | Free |
+| `securitytrails_ip_whois` | Network block registration, owner, abuse contacts | Free |
+| `securitytrails_search_domains` | Search the domain dataset by filter object or DSL query | Free |
+| `securitytrails_search_ips` | Search the IP dataset by filter object or DSL query | Free |
+| `securitytrails_scroll` | Continue a search via its `meta.scroll_id`, when offered | Varies |
+| `securitytrails_ip_useragents` | User agents observed originating from an IPv4 address | **Paid** |
+| `securitytrails_company_associated_ips` | IP ranges attributed to a domain's owning organisation | **Paid** |
 
-### Notes on quota
+Plan column reflects what a free-tier key could reach at the time of writing; SecurityTrails may
+move endpoints between tiers. The two paid endpoints return a clear plan error rather than a
+generic failure, so an agent knows to stop retrying:
 
-SecurityTrails bills per API query, and plans are metered monthly. Two things are worth knowing
-before pointing an agent at a large target:
+```
+Your SecurityTrails plan does not permit this endpoint (HTTP 403): This feature is not
+available for your subscription package.
+```
 
-- `securitytrails_subdomains` costs **one** query no matter how many hostnames come back. It is
-  the cheapest way to enumerate a large apex.
-- `securitytrails_search_domains` and `securitytrails_search_ips` cost **one query per page**. For
-  large result sets use `securitytrails_scroll` with the returned `meta.scroll_id` instead of
-  incrementing `page`.
+### Response format
 
-Large subdomain results are capped at `limit` (default 500) so a single call cannot flood the
-model's context. The response always reports the true `total` and sets `truncated`, so the agent
-can decide to ask for more rather than silently receiving a partial answer.
+Every tool takes `response_format`:
+
+- **`markdown`** (default) — a compact summary. Converts the API's raw Unix timestamps to dates,
+  drops null-filled privacy contacts, and appends a pagination footer saying whether more data
+  exists. Typically a fraction of the tokens of the equivalent JSON.
+- **`json`** — the untouched upstream payload, for when you need a field the summary omits.
+
+If a payload does not match the shape a renderer expects, the server returns the raw JSON rather
+than a partial summary. A rendering gap will cost you tokens, never data.
+
+## Examples
+
+### Finding an origin IP behind a CDN
+
+The current A record is a CDN edge, so ask what it used to be:
+
+```
+> Has example.com always been behind Cloudflare? Check its A record history.
+```
+
+```jsonc
+// securitytrails_domain_details  { "domain": "example.com" }
+// securitytrails_dns_history     { "domain": "example.com", "type": "a" }
+```
+
+The history table shows each IP with the window it was observed in and the hosting organisation —
+an address that predates the CDN cutover is a candidate origin.
+
+### Expanding scope from one domain
+
+```
+> I only know example.com. What else does this organisation own?
+```
+
+```jsonc
+// securitytrails_whois_current { "domain": "example.com" }
+// securitytrails_associated    { "domain": "example.com" }
+// securitytrails_search_domains { "query": "whois_email = 'admin@example.com'" }
+```
+
+WHOIS gives the registrant email; searching the dataset by that email finds every other domain
+registered with it. `securitytrails_whois_history` is often more productive than the current
+record, because older entries predate privacy redaction.
+
+### Mining certificates for hostnames
+
+```
+> Find hostnames for example.com that subdomain enumeration might have missed.
+```
+
+```jsonc
+// securitytrails_subdomains { "domain": "example.com", "limit": 1000 }
+// securitytrails_ssl        { "domain": "example.com", "status": "all", "include_subdomains": true }
+```
+
+SAN entries on expired certificates frequently name internal or staging hosts that no longer
+resolve. Use `status: "all"` — the default `valid` filter hides exactly the interesting ones.
+
+### Profiling an IP
+
+```
+> Who owns 8.8.8.8 and what else is in that block?
+```
+
+```jsonc
+// securitytrails_ip_whois     { "ip": "8.8.8.8" }
+// securitytrails_ip_neighbors { "ip": "8.8.8.8" }
+```
+
+## Quota and performance
+
+SecurityTrails bills per API query against a monthly allowance. `securitytrails_usage` reports
+where you stand. Things worth knowing before pointing an agent at a large target:
+
+- **`securitytrails_subdomains` costs one query regardless of result size.** It returns the whole
+  set in a single call, so prefer one call with a high `limit` over paging with `offset` — paging
+  re-fetches and is billed again. Results default to 100 hostnames with `total_count` and
+  `has_more` always reported, so a truncated result is never mistaken for a complete one.
+- **Paged endpoints cost one query per page.** `securitytrails_associated`, `_dns_history`,
+  `_ssl`, `_search_domains` and `_search_ips` all bill per page.
+- **The domain and IP datasets accept different DSL fields.** `ptr_part` and `open_port_80` are
+  IP-dataset fields; using them against `securitytrails_search_domains` is a syntax error, not an
+  empty result.
+
+Each request has a 30-second timeout and retries twice on `429`/`5xx`/network errors with
+exponential backoff (500ms, then 1000ms). Non-transient failures — `400`, `401`, `403`, `404` —
+are never retried, so a bad argument costs one query rather than three.
 
 ## Configuration
 
@@ -89,11 +172,12 @@ can decide to ask for more rather than silently receiving a partial answer.
 | --- | --- | --- |
 | `SECURITYTRAILS_API_KEY` | *(required)* | Your API key |
 | `SECURITYTRAILS_TIMEOUT_MS` | `30000` | Per-attempt request timeout |
-| `SECURITYTRAILS_MAX_RETRIES` | `2` | Retries on 429/5xx/network errors, with exponential backoff |
+| `SECURITYTRAILS_MAX_RETRIES` | `2` | Retries on 429/5xx/network errors |
 
-If the key is missing the server still starts and still lists its tools, so the host shows the
-server as healthy; each tool call then returns an error naming the variable to set. This is
-deliberate — a server that exits on startup shows up in most hosts as an unexplained crash.
+If the key is missing the server still starts and still lists its tools, so the host shows it as
+healthy; each tool call then returns an error naming the variable to set. This is deliberate — a
+server that exits on startup shows up in most hosts as an unexplained crash. The key is validated
+by use rather than by a startup `ping`, so that restarting your editor does not spend quota.
 
 ## Development
 
@@ -101,22 +185,30 @@ deliberate — a server that exits on startup shows up in most hosts as an unexp
 git clone https://github.com/aqhmal/securitytrails-mcp.git
 cd securitytrails-mcp
 npm install
-npm test          # 28 tests, no API key needed — HTTP layer is stubbed
+npm test          # 85 tests, no API key needed — the HTTP layer is stubbed
 npm run build
 npm run inspect   # build, then open the MCP Inspector against the server
 ```
 
-The test suite drives a real MCP `Client` against the server in-process over a stubbed
-transport, so tool schemas, validation and error handling are exercised through the actual
-protocol rather than by calling handlers directly.
+The suite drives a real MCP `Client` against the server in-process, so tool schemas, argument
+validation, rendering and error handling are exercised through the actual protocol rather than by
+calling handlers directly. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+`evals/` holds a ten-question evaluation set for checking whether a model can actually accomplish
+realistic lookups with these tools.
 
 ## Security
 
 This is a reconnaissance tool. Only use it against infrastructure you are authorised to
-investigate. Please don't put your API key in a committed config file — every host above reads
-it from the environment for a reason.
+investigate.
 
-To report a vulnerability in this server, see [SECURITY.md](./SECURITY.md).
+The API key is read from the environment, sent only to `api.securitytrails.com` over HTTPS as a
+header, and never logged, written to disk, or included in a tool result. Tool arguments are
+validated with Zod before any request is made: hostnames must be bare hostnames, IPs must be
+IPv4, and identifiers interpolated into request paths are percent-encoded, so a traversal
+sequence cannot escape its endpoint.
+
+To report a vulnerability, see [SECURITY.md](./SECURITY.md).
 
 ## License
 

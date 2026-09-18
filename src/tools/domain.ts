@@ -3,11 +3,28 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import type { SecurityTrailsClient } from '../client.js';
+import {
+    renderAssociated,
+    renderDnsHistory,
+    renderDomainDetails,
+    renderSsl,
+    renderSubdomains,
+    renderTags,
+    renderWhoisCurrent,
+    renderWhoisHistory
+} from '../render.js';
 import { READ_ONLY, safe, safeStructured } from '../result.js';
-import { DomainSchema, PageSchema, normalizeHost } from '../schemas.js';
+import { DomainSchema, PageSchema, ResponseFormatSchema, normalizeHost } from '../schemas.js';
 
-/** Default cap on returned subdomains; a large apex can hold tens of thousands. */
-const SUBDOMAIN_LIMIT_DEFAULT = 500;
+/**
+ * Page size for subdomain results.
+ *
+ * The MCP guidance suggests 20–50 for list tools. This deliberately sits higher: SecurityTrails
+ * returns the entire subdomain set in a single billed query, so paging costs a further query
+ * each time rather than being free. 100 keeps a typical result inside a reasonable context
+ * budget while letting most domains resolve in one call.
+ */
+const SUBDOMAIN_LIMIT_DEFAULT = 100;
 const SUBDOMAIN_LIMIT_MAX = 10_000;
 
 interface SubdomainsResponse {
@@ -25,10 +42,11 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
                 'for one domain. The best first call when profiling an unfamiliar domain.',
             annotations: READ_ONLY,
             inputSchema: z.object({
-                domain: DomainSchema.describe('apex domain or hostname, e.g. example.com')
+                domain: DomainSchema.describe('apex domain or hostname, e.g. example.com'),
+                response_format: ResponseFormatSchema
             })
         },
-        safe(({ domain }) => client.request(`/domain/${normalizeHost(domain)}`))
+        safe(({ domain }) => client.request(`/domain/${normalizeHost(domain)}`), renderDomainDetails)
     );
 
     server.registerTool(
@@ -36,10 +54,10 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
         {
             title: 'Enumerate subdomains',
             description:
-                'List known subdomains of a domain. Returns fully-qualified hostnames (the labels are already joined ' +
-                'to the apex) ready to feed into resolution or scanning. Large apexes are truncated to `limit`; the ' +
-                'result reports the true total so you can raise the limit deliberately. Costs one API query regardless ' +
-                'of how many hostnames come back.',
+                'List known subdomains of a domain as fully-qualified hostnames, ready to feed into resolution or ' +
+                'scanning. Costs one API query regardless of how many hostnames exist, so prefer a single call with ' +
+                'a high `limit` over paging with `offset` — each page is separately billed. The response always ' +
+                'reports `total_count` and `has_more` so a truncated result is never mistaken for a complete one.',
             annotations: READ_ONLY,
             inputSchema: z.object({
                 domain: DomainSchema.describe('apex domain, e.g. example.com'),
@@ -57,39 +75,52 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
                     .min(1)
                     .max(SUBDOMAIN_LIMIT_MAX)
                     .default(SUBDOMAIN_LIMIT_DEFAULT)
-                    .describe(`maximum hostnames to return (default ${SUBDOMAIN_LIMIT_DEFAULT})`)
+                    .describe(`maximum hostnames to return (default ${SUBDOMAIN_LIMIT_DEFAULT})`),
+                offset: z.number().int().min(0).default(0).describe('number of hostnames to skip before returning'),
+                response_format: ResponseFormatSchema
             }),
             outputSchema: z.object({
                 apex: z.string(),
                 hostnames: z.array(z.string()).describe('fully-qualified hostnames'),
+                offset: z.number(),
+                limit: z.number(),
                 returned: z.number(),
-                total: z.number().describe('total subdomains SecurityTrails holds for this apex'),
-                truncated: z.boolean(),
+                total_count: z.number().describe('total subdomains SecurityTrails holds for this apex'),
+                has_more: z.boolean(),
+                next_offset: z.number().optional().describe('offset to pass for the next page, when has_more'),
                 note: z.string().optional()
             })
         },
-        safeStructured(async ({ domain, children_only, include_inactive, limit }) => {
+        safeStructured(async ({ domain, children_only, include_inactive, limit, offset }) => {
             const apex = domain.trim().toLowerCase();
             const data = await client.request<SubdomainsResponse>(`/domain/${normalizeHost(domain)}/subdomains`, {
                 query: { children_only, include_inactive }
             });
 
             const labels = data.subdomains ?? [];
-            const total = data.subdomain_count ?? labels.length;
-            const kept = labels.slice(0, limit);
-            const truncated = labels.length > kept.length;
+            const total = labels.length;
+            const page = labels.slice(offset, offset + limit);
+            const hasMore = offset + page.length < total;
 
             return {
                 apex,
-                hostnames: kept.map(label => `${label}.${apex}`),
-                returned: kept.length,
-                total,
-                truncated,
-                ...(truncated
-                    ? { note: `Showing ${kept.length} of ${labels.length} hostnames. Re-run with a higher \`limit\` to see more.` }
+                hostnames: page.map(label => `${label}.${apex}`),
+                offset,
+                limit,
+                returned: page.length,
+                total_count: total,
+                has_more: hasMore,
+                ...(hasMore ? { next_offset: offset + page.length } : {}),
+                ...(hasMore
+                    ? {
+                          note:
+                              `Showing ${page.length} of ${total} hostnames. Raise \`limit\` to get more in one ` +
+                              `call, or pass \`offset: ${offset + page.length}\` — note that either way a second ` +
+                              `call costs another API query.`
+                      }
                     : {})
             };
-        })
+        }, renderSubdomains)
     );
 
     server.registerTool(
@@ -102,10 +133,14 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
             annotations: READ_ONLY,
             inputSchema: z.object({
                 domain: DomainSchema.describe('apex domain'),
-                page: PageSchema
+                page: PageSchema,
+                response_format: ResponseFormatSchema
             })
         },
-        safe(({ domain, page }) => client.request(`/domain/${normalizeHost(domain)}/associated`, { query: { page } }))
+        safe(
+            ({ domain, page }) => client.request(`/domain/${normalizeHost(domain)}/associated`, { query: { page } }),
+            renderAssociated
+        )
     );
 
     server.registerTool(
@@ -121,11 +156,14 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
                 type: z
                     .enum(['a', 'aaaa', 'mx', 'ns', 'soa', 'txt'])
                     .describe('DNS record type to retrieve history for'),
-                page: PageSchema
+                page: PageSchema,
+                response_format: ResponseFormatSchema
             })
         },
-        safe(({ domain, type, page }) =>
-            client.request(`/history/${normalizeHost(domain)}/dns/${type}`, { query: { page } })
+        safe(
+            ({ domain, type, page }) =>
+                client.request(`/history/${normalizeHost(domain)}/dns/${type}`, { query: { page } }),
+            renderDnsHistory
         )
     );
 
@@ -138,10 +176,11 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
                 'nameservers, and creation/expiry dates.',
             annotations: READ_ONLY,
             inputSchema: z.object({
-                domain: DomainSchema.describe('apex domain')
+                domain: DomainSchema.describe('apex domain'),
+                response_format: ResponseFormatSchema
             })
         },
-        safe(({ domain }) => client.request(`/domain/${normalizeHost(domain)}/whois`))
+        safe(({ domain }) => client.request(`/domain/${normalizeHost(domain)}/whois`), renderWhoisCurrent)
     );
 
     server.registerTool(
@@ -149,14 +188,15 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
         {
             title: 'Historical WHOIS',
             description:
-                'Retrieve past WHOIS records for a domain. Historical records often expose registrant details that ' +
-                'have since been redacted behind privacy services.',
+                'Retrieve past WHOIS records for a domain, each with the window it was observed in. Historical ' +
+                'records often expose registrant details that have since been redacted behind privacy services.',
             annotations: READ_ONLY,
             inputSchema: z.object({
-                domain: DomainSchema.describe('apex domain')
+                domain: DomainSchema.describe('apex domain'),
+                response_format: ResponseFormatSchema
             })
         },
-        safe(({ domain }) => client.request(`/history/${normalizeHost(domain)}/whois`))
+        safe(({ domain }) => client.request(`/history/${normalizeHost(domain)}/whois`), renderWhoisHistory)
     );
 
     server.registerTool(
@@ -164,8 +204,9 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
         {
             title: 'SSL/TLS certificates',
             description:
-                'List SSL/TLS certificates issued for a hostname. Subject alternative names in the results frequently ' +
-                'reveal hostnames that subdomain enumeration alone misses.',
+                'List SSL/TLS certificates issued for a hostname. Subject alternative names in the results ' +
+                'frequently reveal hostnames that subdomain enumeration alone misses. Pass `status: "all"` to ' +
+                'include expired certificates, which are often the more interesting ones historically.',
             annotations: READ_ONLY,
             inputSchema: z.object({
                 domain: DomainSchema.describe('domain or subdomain'),
@@ -177,13 +218,16 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
                     .enum(['valid', 'all', 'expired'])
                     .default('valid')
                     .describe('certificate validity filter; use "all" when hunting historical hostnames'),
-                page: PageSchema
+                page: PageSchema,
+                response_format: ResponseFormatSchema
             })
         },
-        safe(({ domain, include_subdomains, status, page }) =>
-            client.request(`/domain/${normalizeHost(domain)}/ssl`, {
-                query: { include_subdomains, status, page }
-            })
+        safe(
+            ({ domain, include_subdomains, status, page }) =>
+                client.request(`/domain/${normalizeHost(domain)}/ssl`, {
+                    query: { include_subdomains, status, page }
+                }),
+            renderSsl
         )
     );
 
@@ -191,12 +235,14 @@ export function registerDomainTools(server: McpServer, client: SecurityTrailsCli
         'securitytrails_tags',
         {
             title: 'Domain tags',
-            description: 'Return SecurityTrails’ classification tags for a domain.',
+            description:
+                'Return SecurityTrails’ classification tags for a domain. Many domains carry no tags at all.',
             annotations: READ_ONLY,
             inputSchema: z.object({
-                domain: DomainSchema.describe('apex domain or hostname')
+                domain: DomainSchema.describe('apex domain or hostname'),
+                response_format: ResponseFormatSchema
             })
         },
-        safe(({ domain }) => client.request(`/domain/${normalizeHost(domain)}/tags`))
+        safe(({ domain }) => client.request(`/domain/${normalizeHost(domain)}/tags`), renderTags)
     );
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { after, describe, it } from 'node:test';
-import { SecurityTrailsError } from '../src/client.js';
-import { testClient } from './support.js';
+import { describe, it } from 'node:test';
+import { SecurityTrailsClient, SecurityTrailsError } from '../src/client.js';
+import { stubFetch, testClient } from './support.js';
 
 describe('SecurityTrailsClient', () => {
     it('sends the API key, accept and user-agent headers', async () => {
@@ -114,4 +114,48 @@ describe('SecurityTrailsClient', () => {
         const { client } = testClient([{ body: undefined }]);
         assert.deepEqual(await client.request('/ping'), {});
     });
+
+    it('reports a timeout distinctly from a generic network failure', async () => {
+        const timeout = new Error('The operation was aborted due to timeout');
+        timeout.name = 'TimeoutError';
+        const { client } = testClient([{ throws: timeout }, { throws: timeout }, { throws: timeout }]);
+        await assert.rejects(() => client.request('/ping'), /timed out after 30000ms/);
+    });
+
+    it('retries a timeout and succeeds if the next attempt is quick', async () => {
+        const timeout = new Error('aborted');
+        timeout.name = 'TimeoutError';
+        const { client, calls } = testClient([{ throws: timeout }, { body: { success: true } }]);
+        assert.deepEqual(await client.request('/ping'), { success: true });
+        assert.equal(calls.length, 2);
+    });
+
+    it('applies exponential backoff between retries', async () => {
+        const delays: number[] = [];
+        const { fetch: fetchImpl } = stubFetch([{ status: 503, body: {} }, { status: 503, body: {} }, { body: {} }]);
+        const client = new SecurityTrailsClient({
+            apiKey: 'test-key',
+            fetchImpl,
+            sleepImpl: async ms => {
+                delays.push(ms);
+            }
+        });
+        await client.request('/ping');
+        assert.deepEqual(delays, [500, 1000], 'backoff should double between attempts');
+    });
+
+    it('honours a configured timeout value in its error message', async () => {
+        const timeout = new Error('aborted');
+        timeout.name = 'TimeoutError';
+        const { fetch: fetchImpl } = stubFetch([{ throws: timeout }]);
+        const client = new SecurityTrailsClient({
+            apiKey: 'test-key',
+            timeoutMs: 1234,
+            maxRetries: 0,
+            fetchImpl,
+            sleepImpl: async () => {}
+        });
+        await assert.rejects(() => client.request('/ping'), /timed out after 1234ms/);
+    });
 });
+
