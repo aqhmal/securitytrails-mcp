@@ -11,6 +11,10 @@ An [MCP](https://modelcontextprotocol.io) server that gives an LLM agent the
 Built for reconnaissance work where the interesting question is usually _"what did this look like
 before the CDN went up?"_ rather than _"what does it resolve to now?"_.
 
+> **Unofficial project.** Not affiliated with, endorsed by, or sponsored by SecurityTrails or
+> Recorded Future, Inc. You bring your own SecurityTrails API key and use it under your own
+> agreement with them. See [Legal](#legal).
+
 ## Quickstart
 
 You need a SecurityTrails API key — the free tier is enough to try it.
@@ -213,8 +217,25 @@ sequence cannot escape its endpoint.
 
 To report a vulnerability, see [SECURITY.md](./SECURITY.md).
 
+## Legal
+
+This is an unofficial, community-maintained client. It is **not** affiliated with, endorsed by, or
+sponsored by SecurityTrails, Recorded Future, Inc., or Mastercard.
+
+SecurityTrails is a trademark of Recorded Future, Inc. (officially styled _SecurityTrails, a
+Recorded Future Company_). The name is used here only to identify the API this software talks to —
+nominative use — and no claim to the mark, and no sponsorship or endorsement, is made or implied.
+No SecurityTrails logos or brand assets are included or distributed with this project.
+
+This project is a client. It ships no SecurityTrails data, and it grants you no rights to any. Your
+use of the API is governed entirely by your own agreement with SecurityTrails / Recorded Future,
+including their [terms of service](https://securitytrails.com/corp/terms-of-service), your plan's
+query limits, and any restrictions on storing or redistributing what you retrieve. You are
+responsible for complying with those terms, and for only running reconnaissance against
+infrastructure you are authorised to investigate.
+
+The MIT licence below covers this client's own source code and nothing else.
+
 ## License
 
 MIT © [aqhmal](https://github.com/aqhmal)
-
-Not affiliated with or endorsed by SecurityTrails / Recorded Future.

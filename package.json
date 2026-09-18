@@ -1,7 +1,7 @@
 {
   "name": "securitytrails-mcp",
-  "version": "1.0.0",
-  "description": "MCP server for the SecurityTrails API — DNS history, subdomain enumeration, WHOIS, SSL certificates and IP intelligence as tools for LLM agents.",
+  "version": "1.0.1",
+  "description": "Unofficial MCP server for the SecurityTrails API — DNS history, subdomain enumeration, WHOIS, SSL certificates and IP intelligence as tools for LLM agents. Not affiliated with SecurityTrails or Recorded Future.",
   "keywords": [
     "mcp",
     "modelcontextprotocol",

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-18
+
+### Changed
+
+- Documented the project's legal position explicitly: an unofficial notice at the top of the
+  README, a Legal section recording that SecurityTrails is a trademark of Recorded Future, Inc.
+  and used here only nominatively to identify the API, and a statement that use of the API is
+  governed by the user's own agreement with SecurityTrails rather than by this project's licence.
+- Package description now leads with "Unofficial" so the distinction is visible on the npm
+  listing itself, not only in the README.
+
 ## [1.0.0] - 2026-09-18
 
 Initial release: 17 read-only tools over the SecurityTrails v1 API, built on
@@ -37,5 +48,6 @@ Initial release: 17 read-only tools over the SecurityTrails v1 API, built on
 - SecurityTrails returns Unix timestamps in mixed units within a single record; Markdown
   rendering infers the unit rather than assuming milliseconds or seconds.
 
-[Unreleased]: https://github.com/aqhmal/securitytrails-mcp/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/aqhmal/securitytrails-mcp/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/aqhmal/securitytrails-mcp/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/aqhmal/securitytrails-mcp/releases/tag/v1.0.0
